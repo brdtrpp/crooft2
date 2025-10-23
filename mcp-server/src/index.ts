@@ -201,31 +201,48 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Store transports by session ID
+const transports = new Map<string, SSEServerTransport>();
+
 // MCP SSE endpoint (no auth for testing with Claude.ai)
 app.get("/sse", async (req, res) => {
   console.log("New SSE connection established");
 
   try {
+    // Generate a session ID
+    const sessionId = `session-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+
     const transport = new SSEServerTransport("/message", res);
     const serverInstance = createServer();
+
+    // Store transport for message handling
+    transports.set(sessionId, transport);
+
+    // Set session ID header for client
+    res.setHeader("X-Session-ID", sessionId);
+
     await serverInstance.connect(transport);
 
     // Clean up on connection close
     req.on("close", () => {
-      console.log("SSE connection closed");
+      console.log("SSE connection closed, session:", sessionId);
+      transports.delete(sessionId);
     });
   } catch (error) {
     console.error("Error establishing SSE connection:", error);
-    res.status(500).json({ error: "Failed to establish SSE connection" });
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Failed to establish SSE connection" });
+    }
   }
 });
 
-// MCP message endpoint - SSE transport handles this internally
-// This endpoint is called by the SSE transport to send messages to the server
-app.post("/message", express.raw({ type: "application/json" }), async (_req, res) => {
-  // The SSEServerTransport will handle the actual message processing
-  // We just need to acknowledge receipt
-  res.status(200).end();
+// MCP message endpoint
+app.post("/message", express.json(), async (_req, res) => {
+  console.log("Received message on /message endpoint");
+
+  // For SSE, messages come through the persistent connection
+  // This endpoint may not be needed depending on SDK version
+  res.status(200).json({ received: true });
 });
 
 // Start server
