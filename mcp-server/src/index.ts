@@ -60,110 +60,114 @@ const TOOLS: Tool[] = [
   },
 ];
 
-// Create server instance
-const server = new Server(
-  {
-    name: "example-mcp-server",
-    version: "1.0.0",
-  },
-  {
-    capabilities: {
-      tools: {},
+// Function to create a new server instance for each connection
+function createServer() {
+  const server = new Server(
+    {
+      name: "example-mcp-server",
+      version: "1.0.0",
     },
-  }
-);
-
-// Handle tool listing
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: TOOLS,
-  };
-});
-
-// Handle tool execution
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
-
-  try {
-    switch (name) {
-      case "get_current_time": {
-        const timezone = args?.timezone as string | undefined;
-        const date = new Date();
-
-        const timeString = timezone
-          ? date.toLocaleString("en-US", { timeZone: timezone })
-          : date.toLocaleString();
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Current time${timezone ? ` in ${timezone}` : ""}: ${timeString}`,
-            },
-          ],
-        };
-      }
-
-      case "calculate": {
-        const expression = args?.expression as string;
-        if (!expression) {
-          throw new Error("Expression is required");
-        }
-
-        // Simple safe evaluation (only allows numbers and basic operators)
-        const sanitized = expression.replace(/[^0-9+\-*/().\s]/g, "");
-        if (sanitized !== expression) {
-          throw new Error("Invalid characters in expression");
-        }
-
-        const result = eval(sanitized);
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: `${expression} = ${result}`,
-            },
-          ],
-        };
-      }
-
-      case "echo": {
-        const message = args?.message as string;
-        const uppercase = args?.uppercase as boolean;
-
-        if (!message) {
-          throw new Error("Message is required");
-        }
-
-        const output = uppercase ? message.toUpperCase() : message;
-
-        return {
-          content: [
-            {
-              type: "text",
-              text: output,
-            },
-          ],
-        };
-      }
-
-      default:
-        throw new Error(`Unknown tool: ${name}`);
+    {
+      capabilities: {
+        tools: {},
+      },
     }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+  );
+
+  // Handle tool listing
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
     return {
-      content: [
-        {
-          type: "text",
-          text: `Error: ${errorMessage}`,
-        },
-      ],
-      isError: true,
+      tools: TOOLS,
     };
-  }
-});
+  });
+
+  // Handle tool execution
+  server.setRequestHandler(CallToolRequestSchema, async (request: any) => {
+    const { name, arguments: args } = request.params;
+
+    try {
+      switch (name) {
+        case "get_current_time": {
+          const timezone = args?.timezone as string | undefined;
+          const date = new Date();
+
+          const timeString = timezone
+            ? date.toLocaleString("en-US", { timeZone: timezone })
+            : date.toLocaleString();
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Current time${timezone ? ` in ${timezone}` : ""}: ${timeString}`,
+              },
+            ],
+          };
+        }
+
+        case "calculate": {
+          const expression = args?.expression as string;
+          if (!expression) {
+            throw new Error("Expression is required");
+          }
+
+          // Simple safe evaluation (only allows numbers and basic operators)
+          const sanitized = expression.replace(/[^0-9+\-*/().\s]/g, "");
+          if (sanitized !== expression) {
+            throw new Error("Invalid characters in expression");
+          }
+
+          const result = eval(sanitized);
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `${expression} = ${result}`,
+              },
+            ],
+          };
+        }
+
+        case "echo": {
+          const message = args?.message as string;
+          const uppercase = args?.uppercase as boolean;
+
+          if (!message) {
+            throw new Error("Message is required");
+          }
+
+          const output = uppercase ? message.toUpperCase() : message;
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: output,
+              },
+            ],
+          };
+        }
+
+        default:
+          throw new Error(`Unknown tool: ${name}`);
+      }
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Error: ${errorMessage}`,
+          },
+        ],
+        isError: true,
+      };
+    }
+  });
+
+  return server;
+}
 
 // Configuration
 const PORT = process.env.PORT || 3000;
@@ -203,7 +207,8 @@ app.get("/sse", async (req, res) => {
 
   try {
     const transport = new SSEServerTransport("/message", res);
-    await server.connect(transport);
+    const serverInstance = createServer();
+    await serverInstance.connect(transport);
 
     // Clean up on connection close
     req.on("close", () => {
