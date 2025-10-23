@@ -197,27 +197,17 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Store active transports
-const transports = new Map();
-
 // MCP SSE endpoint (no auth for testing with Claude.ai)
 app.get("/sse", async (req, res) => {
   console.log("New SSE connection established");
 
   try {
     const transport = new SSEServerTransport("/message", res);
-    const sessionId = Date.now().toString();
-    transports.set(sessionId, transport);
-
-    // Set session ID in response header for message endpoint
-    res.setHeader("X-Session-ID", sessionId);
-
     await server.connect(transport);
 
     // Clean up on connection close
     req.on("close", () => {
       console.log("SSE connection closed");
-      transports.delete(sessionId);
     });
   } catch (error) {
     console.error("Error establishing SSE connection:", error);
@@ -225,10 +215,12 @@ app.get("/sse", async (req, res) => {
   }
 });
 
-// MCP message endpoint (no auth for testing with Claude.ai)
-app.post("/message", async (req, res) => {
-  console.log("Received message:", req.body);
-  res.status(200).json({ received: true });
+// MCP message endpoint - SSE transport handles this internally
+// This endpoint is called by the SSE transport to send messages to the server
+app.post("/message", express.raw({ type: "application/json" }), async (_req, res) => {
+  // The SSEServerTransport will handle the actual message processing
+  // We just need to acknowledge receipt
+  res.status(200).end();
 });
 
 // Start server
