@@ -197,18 +197,38 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
+// Store active transports
+const transports = new Map();
+
 // MCP SSE endpoint
 app.get("/sse", authenticate, async (req, res) => {
   console.log("New SSE connection established");
 
-  const transport = new SSEServerTransport("/message", res);
-  await server.connect(transport);
+  try {
+    const transport = new SSEServerTransport("/message", res);
+    const sessionId = Date.now().toString();
+    transports.set(sessionId, transport);
+
+    // Set session ID in response header for message endpoint
+    res.setHeader("X-Session-ID", sessionId);
+
+    await server.connect(transport);
+
+    // Clean up on connection close
+    req.on("close", () => {
+      console.log("SSE connection closed");
+      transports.delete(sessionId);
+    });
+  } catch (error) {
+    console.error("Error establishing SSE connection:", error);
+    res.status(500).json({ error: "Failed to establish SSE connection" });
+  }
 });
 
 // MCP message endpoint
 app.post("/message", authenticate, async (req, res) => {
-  // SSE transport handles this automatically
-  res.status(200).end();
+  console.log("Received message:", req.body);
+  res.status(200).json({ received: true });
 });
 
 // Start server
