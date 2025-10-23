@@ -178,7 +178,13 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+// Don't apply JSON parsing to /message endpoint - SSE transport needs raw body
+app.use((req, res, next) => {
+  if (req.path === '/message') {
+    return next();
+  }
+  express.json()(req, res, next);
+});
 
 // Authentication middleware
 const authenticate = (req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -260,14 +266,14 @@ app.get("/sse", async (req, res) => {
   }
 });
 
-// MCP message endpoint
-app.post("/message", express.raw({ type: "application/json" }), async (req, res) => {
+// MCP message endpoint - no middleware to allow SSE transport to handle raw request
+app.post("/message", async (req, res) => {
   console.log("=== Received message on /message endpoint ===");
   console.log("Current transport available:", !!currentTransport);
   console.log("Active transports:", transports.size);
 
   try {
-    // Try to handle the message with the current transport
+    // Let the SSE transport handle the message directly
     if (currentTransport && typeof (currentTransport as any).handlePostMessage === 'function') {
       console.log("Calling transport.handlePostMessage");
       await (currentTransport as any).handlePostMessage(req, res);
