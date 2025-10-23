@@ -271,13 +271,18 @@ app.post("/message", express.raw({ type: "application/json" }), async (req, res)
     if (currentTransport && typeof (currentTransport as any).handlePostMessage === 'function') {
       console.log("Calling transport.handlePostMessage");
       await (currentTransport as any).handlePostMessage(req, res);
+      console.log("handlePostMessage completed successfully");
     } else {
-      console.log("No handlePostMessage method, responding with 202");
+      console.log("No handlePostMessage method found on transport");
+      console.log("Transport methods:", currentTransport ? Object.getOwnPropertyNames(Object.getPrototypeOf(currentTransport)) : "no transport");
       res.status(202).end();
     }
   } catch (error) {
-    console.error("Error handling message:", error);
-    res.status(500).json({ error: "Message handling failed" });
+    console.error("!!! Error handling message:", error);
+    console.error("Stack:", error instanceof Error ? error.stack : "no stack");
+    if (!res.headersSent) {
+      res.status(500).json({ error: "Message handling failed" });
+    }
   }
 });
 
