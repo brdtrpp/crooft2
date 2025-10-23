@@ -206,14 +206,19 @@ const transports = new Map<string, SSEServerTransport>();
 
 // MCP SSE endpoint (no auth for testing with Claude.ai)
 app.get("/sse", async (req, res) => {
-  console.log("New SSE connection established");
+  console.log("=== New SSE connection established ===");
+  console.log("Headers:", JSON.stringify(req.headers, null, 2));
 
   try {
     // Generate a session ID
     const sessionId = `session-${Date.now()}-${Math.random().toString(36).substring(7)}`;
+    console.log("Session ID:", sessionId);
 
     const transport = new SSEServerTransport("/message", res);
+    console.log("SSEServerTransport created");
+
     const serverInstance = createServer();
+    console.log("Server instance created");
 
     // Store transport for message handling
     transports.set(sessionId, transport);
@@ -221,15 +226,27 @@ app.get("/sse", async (req, res) => {
     // Set session ID header for client
     res.setHeader("X-Session-ID", sessionId);
 
+    console.log("About to connect server to transport...");
     await serverInstance.connect(transport);
+    console.log("Server connected to transport successfully!");
 
     // Clean up on connection close
     req.on("close", () => {
-      console.log("SSE connection closed, session:", sessionId);
+      console.log("=== SSE connection closed ===, session:", sessionId);
       transports.delete(sessionId);
     });
+
+    req.on("error", (err) => {
+      console.error("Request error:", err);
+    });
+
+    res.on("error", (err) => {
+      console.error("Response error:", err);
+    });
+
   } catch (error) {
-    console.error("Error establishing SSE connection:", error);
+    console.error("!!! Error establishing SSE connection:", error);
+    console.error("Stack:", error instanceof Error ? error.stack : "no stack");
     if (!res.headersSent) {
       res.status(500).json({ error: "Failed to establish SSE connection" });
     }
