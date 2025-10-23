@@ -201,8 +201,8 @@ app.get("/health", (req, res) => {
   res.json({ status: "ok", timestamp: new Date().toISOString() });
 });
 
-// Store transports by session ID
-const transports = new Map<string, SSEServerTransport>();
+// Store transports and servers by session ID
+const transports = new Map<string, { transport: SSEServerTransport; server: Server }>();
 
 // MCP SSE endpoint (no auth for testing with Claude.ai)
 app.get("/sse", async (req, res) => {
@@ -220,8 +220,8 @@ app.get("/sse", async (req, res) => {
     const serverInstance = createServer();
     console.log("Server instance created");
 
-    // Store transport for message handling
-    transports.set(sessionId, transport);
+    // Store transport and server for message handling
+    transports.set(sessionId, { transport, server: serverInstance });
 
     // Set session ID header for client
     res.setHeader("X-Session-ID", sessionId);
@@ -229,11 +229,13 @@ app.get("/sse", async (req, res) => {
     console.log("About to connect server to transport...");
     await serverInstance.connect(transport);
     console.log("Server connected to transport successfully!");
+    console.log("Active sessions:", transports.size);
 
     // Clean up on connection close
     req.on("close", () => {
       console.log("=== SSE connection closed ===, session:", sessionId);
       transports.delete(sessionId);
+      console.log("Remaining sessions:", transports.size);
     });
 
     req.on("error", (err) => {
@@ -254,11 +256,16 @@ app.get("/sse", async (req, res) => {
 });
 
 // MCP message endpoint
-app.post("/message", express.json(), async (_req, res) => {
-  console.log("Received message on /message endpoint");
+app.post("/message", express.json(), async (req, res) => {
+  console.log("=== Received message on /message endpoint ===");
+  console.log("Body:", JSON.stringify(req.body, null, 2));
+  console.log("Headers:", JSON.stringify(req.headers, null, 2));
+  console.log("Active transports:", transports.size);
 
-  // For SSE, messages come through the persistent connection
-  // This endpoint may not be needed depending on SDK version
+  // The SSEServerTransport should handle messages through the SSE connection
+  // This POST endpoint might be used for client-to-server messages
+  // But we need to determine which session this belongs to
+
   res.status(200).json({ received: true });
 });
 
