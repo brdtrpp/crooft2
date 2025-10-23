@@ -200,8 +200,8 @@ app.get("/health", (req, res) => {
 // Store active transports
 const transports = new Map();
 
-// MCP SSE endpoint
-app.get("/sse", authenticate, async (req, res) => {
+// MCP SSE endpoint (no auth for testing with Claude.ai)
+app.get("/sse", async (req, res) => {
   console.log("New SSE connection established");
 
   try {
@@ -225,8 +225,8 @@ app.get("/sse", authenticate, async (req, res) => {
   }
 });
 
-// MCP message endpoint
-app.post("/message", authenticate, async (req, res) => {
+// MCP message endpoint (no auth for testing with Claude.ai)
+app.post("/message", async (req, res) => {
   console.log("Received message:", req.body);
   res.status(200).json({ received: true });
 });
