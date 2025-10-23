@@ -203,6 +203,7 @@ app.get("/health", (req, res) => {
 
 // Store transports and servers by session ID
 const transports = new Map<string, { transport: SSEServerTransport; server: Server }>();
+let currentTransport: SSEServerTransport | null = null;
 
 // MCP SSE endpoint (no auth for testing with Claude.ai)
 app.get("/sse", async (req, res) => {
@@ -222,6 +223,7 @@ app.get("/sse", async (req, res) => {
 
     // Store transport and server for message handling
     transports.set(sessionId, { transport, server: serverInstance });
+    currentTransport = transport; // Track most recent for single-user mode
 
     // Set session ID header for client
     res.setHeader("X-Session-ID", sessionId);
@@ -235,6 +237,9 @@ app.get("/sse", async (req, res) => {
     req.on("close", () => {
       console.log("=== SSE connection closed ===, session:", sessionId);
       transports.delete(sessionId);
+      if (currentTransport === transport) {
+        currentTransport = null;
+      }
       console.log("Remaining sessions:", transports.size);
     });
 
@@ -256,17 +261,24 @@ app.get("/sse", async (req, res) => {
 });
 
 // MCP message endpoint
-app.post("/message", express.json(), async (req, res) => {
+app.post("/message", express.raw({ type: "application/json" }), async (req, res) => {
   console.log("=== Received message on /message endpoint ===");
-  console.log("Body:", JSON.stringify(req.body, null, 2));
-  console.log("Headers:", JSON.stringify(req.headers, null, 2));
+  console.log("Current transport available:", !!currentTransport);
   console.log("Active transports:", transports.size);
 
-  // The SSEServerTransport should handle messages through the SSE connection
-  // This POST endpoint might be used for client-to-server messages
-  // But we need to determine which session this belongs to
-
-  res.status(200).json({ received: true });
+  try {
+    // Try to handle the message with the current transport
+    if (currentTransport && typeof (currentTransport as any).handlePostMessage === 'function') {
+      console.log("Calling transport.handlePostMessage");
+      await (currentTransport as any).handlePostMessage(req, res);
+    } else {
+      console.log("No handlePostMessage method, responding with 202");
+      res.status(202).end();
+    }
+  } catch (error) {
+    console.error("Error handling message:", error);
+    res.status(500).json({ error: "Message handling failed" });
+  }
 });
 
 // Start server
